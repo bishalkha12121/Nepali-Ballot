@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
-import { Menu, X, Vote, BarChart3, History, Home } from "lucide-react";
+import { Menu, X, Vote, BarChart3, History, Home, Gamepad2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const navLinks = [
@@ -8,6 +8,7 @@ const navLinks = [
   { path: "/vote", label: "Vote Now", icon: Vote },
   { path: "/results", label: "Live Results", icon: BarChart3 },
   { path: "/history", label: "History", icon: History },
+  { path: "/games", label: "Games", icon: Gamepad2 },
 ];
 
 const Layout = ({ children }) => {
