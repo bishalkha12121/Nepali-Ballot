@@ -513,6 +513,316 @@ async def get_leaderboard():
         })
     return leaderboard
 
+# ============== NEWS ENDPOINTS ==============
+
+RSS_FEEDS = [
+    {"id": "bbc", "name": "BBC Nepali", "url": "https://feeds.bbci.co.uk/nepali/rss.xml", "color": "#BB1919"},
+    {"id": "ekantipur", "name": "Ekantipur", "url": "https://ekantipur.com/rss", "color": "#1E40AF"},
+    {"id": "kathmandu", "name": "Kathmandu Post", "url": "https://kathmandupost.com/rss", "color": "#DC2626"},
+]
+
+async def fetch_rss_feed(feed: dict) -> List[dict]:
+    """Fetch and parse RSS feed"""
+    articles = []
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(feed["url"], follow_redirects=True)
+            if response.status_code == 200:
+                root = ET.fromstring(response.content)
+                # Handle both RSS and Atom feeds
+                items = root.findall('.//item') or root.findall('.//{http://www.w3.org/2005/Atom}entry')
+                
+                for item in items[:10]:  # Limit to 10 items per feed
+                    title = item.findtext('title') or item.findtext('{http://www.w3.org/2005/Atom}title') or ''
+                    link = item.findtext('link') or ''
+                    if not link:
+                        link_elem = item.find('{http://www.w3.org/2005/Atom}link')
+                        if link_elem is not None:
+                            link = link_elem.get('href', '')
+                    
+                    description = item.findtext('description') or item.findtext('{http://www.w3.org/2005/Atom}summary') or ''
+                    pub_date = item.findtext('pubDate') or item.findtext('{http://www.w3.org/2005/Atom}published') or ''
+                    
+                    # Try to get image
+                    image = None
+                    media_content = item.find('{http://search.yahoo.com/mrss/}content')
+                    if media_content is not None:
+                        image = media_content.get('url')
+                    enclosure = item.find('enclosure')
+                    if enclosure is not None and not image:
+                        image = enclosure.get('url')
+                    
+                    # Clean description (remove HTML)
+                    import re
+                    clean_desc = re.sub('<[^<]+?>', '', description)[:200] if description else ''
+                    
+                    articles.append({
+                        "id": f"{feed['id']}_{hash(title) % 10000}",
+                        "title": title.strip(),
+                        "link": link.strip(),
+                        "description": clean_desc.strip(),
+                        "time": pub_date[:25] if pub_date else "Recent",
+                        "source": feed["name"],
+                        "sourceId": feed["id"],
+                        "sourceColor": feed["color"],
+                        "image": image
+                    })
+    except Exception as e:
+        logging.error(f"Failed to fetch RSS from {feed['name']}: {e}")
+    return articles
+
+@api_router.get("/news")
+async def get_news():
+    """Get news from all RSS sources"""
+    all_articles = []
+    
+    # Fetch all feeds concurrently
+    tasks = [fetch_rss_feed(feed) for feed in RSS_FEEDS]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    for result in results:
+        if isinstance(result, list):
+            all_articles.extend(result)
+    
+    # Sort by time (most recent first) - simple string sort works for RSS dates
+    all_articles.sort(key=lambda x: x.get('time', ''), reverse=True)
+    
+    return {
+        "articles": all_articles,
+        "sources": RSS_FEEDS,
+        "last_updated": datetime.now(timezone.utc).isoformat()
+    }
+
+# ============== CONSTITUENCY ENDPOINTS ==============
+
+# Sample constituency data - can be expanded
+CONSTITUENCIES_DATA = [
+    # Koshi Province - Federal
+    {"id": "koshi-1", "name": "Koshi 1", "province_id": "koshi", "province": "Koshi Province", "district": "Jhapa", "type": "federal", "candidates_count": 5},
+    {"id": "koshi-2", "name": "Koshi 2", "province_id": "koshi", "province": "Koshi Province", "district": "Jhapa", "type": "federal", "candidates_count": 4},
+    {"id": "koshi-3", "name": "Koshi 3", "province_id": "koshi", "province": "Koshi Province", "district": "Morang", "type": "federal", "candidates_count": 6},
+    {"id": "koshi-4", "name": "Koshi 4", "province_id": "koshi", "province": "Koshi Province", "district": "Morang", "type": "federal", "candidates_count": 5},
+    {"id": "koshi-5", "name": "Koshi 5", "province_id": "koshi", "province": "Koshi Province", "district": "Sunsari", "type": "federal", "candidates_count": 4},
+    
+    # Bagmati Province - Federal
+    {"id": "bagmati-1", "name": "Bagmati 1", "province_id": "bagmati", "province": "Bagmati Province", "district": "Kathmandu", "type": "federal", "candidates_count": 8},
+    {"id": "bagmati-2", "name": "Bagmati 2", "province_id": "bagmati", "province": "Bagmati Province", "district": "Kathmandu", "type": "federal", "candidates_count": 7},
+    {"id": "bagmati-3", "name": "Bagmati 3", "province_id": "bagmati", "province": "Bagmati Province", "district": "Kathmandu", "type": "federal", "candidates_count": 9},
+    {"id": "bagmati-4", "name": "Bagmati 4", "province_id": "bagmati", "province": "Bagmati Province", "district": "Lalitpur", "type": "federal", "candidates_count": 6},
+    {"id": "bagmati-5", "name": "Bagmati 5", "province_id": "bagmati", "province": "Bagmati Province", "district": "Bhaktapur", "type": "federal", "candidates_count": 5},
+    
+    # Gandaki Province - Federal  
+    {"id": "gandaki-1", "name": "Gandaki 1", "province_id": "gandaki", "province": "Gandaki Province", "district": "Kaski", "type": "federal", "candidates_count": 6},
+    {"id": "gandaki-2", "name": "Gandaki 2", "province_id": "gandaki", "province": "Gandaki Province", "district": "Kaski", "type": "federal", "candidates_count": 5},
+    {"id": "gandaki-3", "name": "Gandaki 3", "province_id": "gandaki", "province": "Gandaki Province", "district": "Syangja", "type": "federal", "candidates_count": 4},
+    
+    # Lumbini Province - Federal
+    {"id": "lumbini-1", "name": "Lumbini 1", "province_id": "lumbini", "province": "Lumbini Province", "district": "Rupandehi", "type": "federal", "candidates_count": 7},
+    {"id": "lumbini-2", "name": "Lumbini 2", "province_id": "lumbini", "province": "Lumbini Province", "district": "Rupandehi", "type": "federal", "candidates_count": 6},
+    {"id": "lumbini-3", "name": "Lumbini 3", "province_id": "lumbini", "province": "Lumbini Province", "district": "Kapilvastu", "type": "federal", "candidates_count": 5},
+    
+    # Madhesh Province - Federal
+    {"id": "madhesh-1", "name": "Madhesh 1", "province_id": "madhesh", "province": "Madhesh Province", "district": "Parsa", "type": "federal", "candidates_count": 6},
+    {"id": "madhesh-2", "name": "Madhesh 2", "province_id": "madhesh", "province": "Madhesh Province", "district": "Bara", "type": "federal", "candidates_count": 5},
+    {"id": "madhesh-3", "name": "Madhesh 3", "province_id": "madhesh", "province": "Madhesh Province", "district": "Dhanusha", "type": "federal", "candidates_count": 7},
+    
+    # Provincial constituencies
+    {"id": "bagmati-p1", "name": "Bagmati Provincial 1", "province_id": "bagmati", "province": "Bagmati Province", "district": "Kathmandu", "type": "provincial", "candidates_count": 6},
+    {"id": "bagmati-p2", "name": "Bagmati Provincial 2", "province_id": "bagmati", "province": "Bagmati Province", "district": "Kathmandu", "type": "provincial", "candidates_count": 5},
+    {"id": "gandaki-p1", "name": "Gandaki Provincial 1", "province_id": "gandaki", "province": "Gandaki Province", "district": "Kaski", "type": "provincial", "candidates_count": 4},
+    
+    # Local level
+    {"id": "ktm-metro", "name": "Kathmandu Metropolitan City", "province_id": "bagmati", "province": "Bagmati Province", "district": "Kathmandu", "type": "local", "candidates_count": 12},
+    {"id": "pokhara-metro", "name": "Pokhara Metropolitan City", "province_id": "gandaki", "province": "Gandaki Province", "district": "Kaski", "type": "local", "candidates_count": 8},
+    {"id": "lalitpur-metro", "name": "Lalitpur Metropolitan City", "province_id": "bagmati", "province": "Bagmati Province", "district": "Lalitpur", "type": "local", "candidates_count": 7},
+]
+
+# Sample constituency candidates - expandable
+CONSTITUENCY_CANDIDATES_DATA = [
+    # Kathmandu Metro candidates
+    {
+        "id": "cand-ktm-1",
+        "name": "Balen Shah",
+        "party": "Independent",
+        "party_color": "#48CAE4",
+        "constituency": "Kathmandu Metropolitan City",
+        "constituency_id": "ktm-metro",
+        "district": "Kathmandu",
+        "province_id": "bagmati",
+        "image_url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face",
+        "bio": "Civil engineer, rapper, and current Mayor of Kathmandu. Known for anti-corruption stance and urban development.",
+        "age": 35,
+        "is_incumbent": True,
+        "elections_contested": 1,
+        "wins": 1,
+        "election_history": [
+            {"year": 2022, "election_type": "Local", "constituency": "Kathmandu Metro Mayor", "result": "Won", "votes": 61767}
+        ]
+    },
+    {
+        "id": "cand-ktm-2",
+        "name": "Sirjana Singh",
+        "party": "Nepali Congress",
+        "party_color": "#2A9D8F",
+        "constituency": "Kathmandu Metropolitan City",
+        "constituency_id": "ktm-metro",
+        "district": "Kathmandu",
+        "province_id": "bagmati",
+        "image_url": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=face",
+        "bio": "Experienced politician and former deputy mayor candidate.",
+        "age": 48,
+        "is_incumbent": False,
+        "elections_contested": 2,
+        "wins": 0,
+        "election_history": [
+            {"year": 2022, "election_type": "Local", "constituency": "Kathmandu Metro Mayor", "result": "Lost", "votes": 35421},
+            {"year": 2017, "election_type": "Local", "constituency": "Kathmandu Metro Deputy Mayor", "result": "Lost", "votes": 28654}
+        ]
+    },
+    {
+        "id": "cand-ktm-3",
+        "name": "Keshav Sthapit",
+        "party": "CPN-UML",
+        "party_color": "#EF233C",
+        "constituency": "Kathmandu Metropolitan City",
+        "constituency_id": "ktm-metro",
+        "district": "Kathmandu",
+        "province_id": "bagmati",
+        "image_url": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face",
+        "bio": "Former Mayor of Kathmandu (2002-2006). Veteran UML leader.",
+        "age": 65,
+        "is_incumbent": False,
+        "elections_contested": 3,
+        "wins": 1,
+        "election_history": [
+            {"year": 2022, "election_type": "Local", "constituency": "Kathmandu Metro Mayor", "result": "Lost", "votes": 42376},
+            {"year": 2017, "election_type": "Local", "constituency": "Kathmandu Metro Mayor", "result": "Lost", "votes": 67892},
+            {"year": 2002, "election_type": "Local", "constituency": "Kathmandu Metro Mayor", "result": "Won", "votes": 54321}
+        ]
+    },
+    # Bagmati-1 Federal candidates
+    {
+        "id": "cand-bag1-1",
+        "name": "Gagan Thapa",
+        "party": "Nepali Congress",
+        "party_color": "#2A9D8F",
+        "constituency": "Bagmati 1",
+        "constituency_id": "bagmati-1",
+        "district": "Kathmandu",
+        "province_id": "bagmati",
+        "image_url": "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&h=400&fit=crop&crop=face",
+        "bio": "General Secretary of Nepali Congress. Young leader known for reform agenda.",
+        "age": 48,
+        "is_incumbent": True,
+        "elections_contested": 3,
+        "wins": 3,
+        "election_history": [
+            {"year": 2022, "election_type": "Federal", "constituency": "Kathmandu-4", "result": "Won", "votes": 32456},
+            {"year": 2017, "election_type": "Federal", "constituency": "Kathmandu-4", "result": "Won", "votes": 28976},
+            {"year": 2013, "election_type": "CA", "constituency": "Kathmandu-4", "result": "Won", "votes": 24567}
+        ]
+    },
+    {
+        "id": "cand-bag1-2",
+        "name": "Rajendra Lingden",
+        "party": "RPP",
+        "party_color": "#FFB703",
+        "constituency": "Bagmati 1",
+        "constituency_id": "bagmati-1",
+        "district": "Kathmandu",
+        "province_id": "bagmati",
+        "image_url": "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&h=400&fit=crop&crop=face",
+        "bio": "Chairman of Rastriya Prajatantra Party. Pro-monarchy advocate.",
+        "age": 55,
+        "is_incumbent": False,
+        "elections_contested": 2,
+        "wins": 1,
+        "election_history": [
+            {"year": 2022, "election_type": "Federal", "constituency": "Jhapa-2", "result": "Won", "votes": 25678}
+        ]
+    },
+    # Pokhara Metro candidates
+    {
+        "id": "cand-pok-1",
+        "name": "Dhan Raj Acharya",
+        "party": "CPN-UML",
+        "party_color": "#EF233C",
+        "constituency": "Pokhara Metropolitan City",
+        "constituency_id": "pokhara-metro",
+        "district": "Kaski",
+        "province_id": "gandaki",
+        "image_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=face",
+        "bio": "Current Mayor of Pokhara. Tourism and development focused.",
+        "age": 52,
+        "is_incumbent": True,
+        "elections_contested": 2,
+        "wins": 2,
+        "election_history": [
+            {"year": 2022, "election_type": "Local", "constituency": "Pokhara Metro Mayor", "result": "Won", "votes": 45678},
+            {"year": 2017, "election_type": "Local", "constituency": "Pokhara Metro Mayor", "result": "Won", "votes": 38765}
+        ]
+    }
+]
+
+@api_router.get("/constituencies")
+async def get_constituencies():
+    """Get all constituencies"""
+    return CONSTITUENCIES_DATA
+
+@api_router.get("/constituency-candidates")
+async def get_constituency_candidates():
+    """Get all constituency candidates"""
+    return CONSTITUENCY_CANDIDATES_DATA
+
+@api_router.get("/constituencies/{constituency_id}")
+async def get_constituency(constituency_id: str):
+    """Get specific constituency details"""
+    for c in CONSTITUENCIES_DATA:
+        if c["id"] == constituency_id:
+            # Get candidates for this constituency
+            candidates = [cand for cand in CONSTITUENCY_CANDIDATES_DATA if cand["constituency_id"] == constituency_id]
+            return {**c, "candidates": candidates}
+    raise HTTPException(status_code=404, detail="Constituency not found")
+
+@api_router.post("/constituencies")
+async def add_constituency(data: dict):
+    """Add a new constituency (for future expansion)"""
+    new_constituency = {
+        "id": data.get("id") or str(uuid.uuid4()),
+        "name": data.get("name"),
+        "province_id": data.get("province_id"),
+        "province": data.get("province"),
+        "district": data.get("district"),
+        "type": data.get("type", "federal"),
+        "candidates_count": 0
+    }
+    # In production, save to database
+    CONSTITUENCIES_DATA.append(new_constituency)
+    return new_constituency
+
+@api_router.post("/constituency-candidates")
+async def add_constituency_candidate(data: dict):
+    """Add a new candidate to a constituency (for future expansion)"""
+    new_candidate = {
+        "id": data.get("id") or str(uuid.uuid4()),
+        "name": data.get("name"),
+        "party": data.get("party"),
+        "party_color": data.get("party_color", "#6B7280"),
+        "constituency": data.get("constituency"),
+        "constituency_id": data.get("constituency_id"),
+        "district": data.get("district"),
+        "province_id": data.get("province_id"),
+        "image_url": data.get("image_url"),
+        "bio": data.get("bio"),
+        "age": data.get("age"),
+        "is_incumbent": data.get("is_incumbent", False),
+        "elections_contested": data.get("elections_contested", 0),
+        "wins": data.get("wins", 0),
+        "election_history": data.get("election_history", [])
+    }
+    CONSTITUENCY_CANDIDATES_DATA.append(new_candidate)
+    return new_candidate
+
 # Include the router in the main app
 app.include_router(api_router)
 
