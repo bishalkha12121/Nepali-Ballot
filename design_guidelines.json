@@ -1,0 +1,125 @@
+{
+  "project_name": "Nepal Election Simulation",
+  "design_philosophy": {
+    "theme_name": "The Himalayan Ballot",
+    "core_concept": "Digital Democracy meets Ancient Heritage. A fusion of brutalist political typography with the organic textures of Nepal.",
+    "emotional_tone": "Patriotic, Urgent, Transparent, Historic",
+    "visual_style": "Modern Nepalese. High contrast, paper textures, bold symbols.",
+    "light_dark_mode": "Hybrid. Light Mode (Rice Paper) for history/reading. Dark Mode (Night Count) for live results."
+  },
+  "typography": {
+    "font_installation_command": "npm install @fontsource/bebas-neue @fontsource/inter @fontsource/playfair-display",
+    "headings": {
+      "family": "Bebas Neue, sans-serif",
+      "usage": "All main page titles, candidate names, and 'VOTE NOW' CTAs.",
+      "characteristics": "Uppercase, tall, imposing. Letter-spacing: 1px."
+    },
+    "body": {
+      "family": "Inter, sans-serif",
+      "usage": "Descriptions, instructions, data tables.",
+      "characteristics": "Clean, legible, neutral."
+    },
+    "narrative": {
+      "family": "Playfair Display, serif",
+      "usage": "The 'Mission Statement' and historical context sections.",
+      "characteristics": "Elegant, editorial, serious."
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "name": "Gorkhali Red",
+        "hex": "#D90429",
+        "usage": "Primary buttons, active states, Nepal flag elements."
+      },
+      "secondary": {
+        "name": "Peace Blue",
+        "hex": "#003049",
+        "usage": "Borders, footers, secondary text."
+      },
+      "accent": {
+        "name": "Marigold",
+        "hex": "#F77F00",
+        "usage": "Highlights, 'Winner' badges, notifications."
+      },
+      "background": {
+        "light": "#FDFCDC",
+        "dark": "#0F172A",
+        "paper_texture": "Use a subtle noise overlay on the light background."
+      },
+      "neutral": {
+        "gray_100": "#F1F5F9",
+        "gray_900": "#0F172A"
+      }
+    },
+    "party_colors": {
+      "communist_red": "#EF233C",
+      "congress_green": "#2A9D8F",
+      "rsp_blue": "#48CAE4",
+      "rpp_gold": "#FFB703"
+    }
+  },
+  "layout_strategies": {
+    "landing_page": {
+      "structure": "Tetris Grid (Mode A)",
+      "hero_section": "Full-screen background image (Kathmandu Historic) with 'Mission Statement' overlay in Playfair Display.",
+      "mission_statement": "Scroll-triggered storytelling. Text fades in over historical images."
+    },
+    "voting_page": {
+      "structure": "Grid of Cards (Responsive)",
+      "card_style": "Minimalist. White background, 1px border (Peace Blue). Large Party Symbol centered. Candidate name at bottom in Bebas Neue.",
+      "interaction": "Card scales up 1.05x on hover. Border turns Gorkhali Red on selection."
+    },
+    "results_dashboard": {
+      "structure": "Bento Grid (Mode B)",
+      "density": "High. Use 'Peace Blue' background for the dashboard container to make white charts pop.",
+      "charts": "Use Recharts. Bar charts for party seats, Pie charts for vote share."
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#D90429] text-white hover:bg-[#EF233C] rounded-none uppercase font-bebas tracking-wider px-8 py-3",
+      "secondary": "border-2 border-[#003049] text-[#003049] hover:bg-[#003049] hover:text-white rounded-none uppercase font-bebas tracking-wider px-8 py-3"
+    },
+    "cards": {
+      "candidate": "bg-white border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 rounded-sm p-6 flex flex-col items-center text-center",
+      "stat": "bg-white/50 backdrop-blur-sm border-l-4 border-[#D90429] p-4"
+    },
+    "inputs": {
+      "style": "bg-transparent border-b-2 border-gray-300 focus:border-[#D90429] outline-none rounded-none px-0 py-2 transition-colors"
+    }
+  },
+  "assets": {
+    "images": {
+      "hero_background": "https://images.pexels.com/photos/15686668/pexels-photo-15686668.jpeg",
+      "history_section": "https://images.pexels.com/photos/17885061/pexels-photo-17885061.jpeg",
+      "voting_context": "https://images.pexels.com/photos/5935749/pexels-photo-5935749.jpeg",
+      "mountains": "https://images.pexels.com/photos/4381227/pexels-photo-4381227.jpeg"
+    },
+    "icons": {
+      "library": "lucide-react",
+      "party_symbols": "Use Lucide icons as metaphors if real SVGs aren't available: 'Sun' (UML), 'TreeDeciduous' (Congress), 'Bell' (RSP), 'Hammer' (Maoist - use 'Gavel' or custom SVG)."
+    }
+  },
+  "motion": {
+    "library": "framer-motion",
+    "page_transition": "Slide in from right (X-axis) for voting flow. Fade in for history.",
+    "hover_effects": "Scale 1.02, Box Shadow increase.",
+    "loading_state": "Spinning 'Chakra' or 'Sun' icon."
+  },
+  "universal_guidelines": [
+    "Do not use gradients for backgrounds. Use solid colors or noise textures.",
+    "Ensure all text on the Hero image has a 'backdrop-blur-sm' or dark overlay for readability.",
+    "Use 'Bebas Neue' ONLY for headings. It is too hard to read for body text.",
+    "The 'Mission Statement' is the heart of the app. Make it poetic and visually distinct.",
+    "For the 'Anonymous Voting' feature, emphasize privacy visually (e.g., 'Incognito' icons, lock symbols)."
+  ],
+  "instructions_to_main_agent": [
+    "1. Install fonts: npm install @fontsource/bebas-neue @fontsource/inter @fontsource/playfair-display",
+    "2. Configure Tailwind theme to include the custom colors (Gorkhali Red, Peace Blue, etc.).",
+    "3. Create a 'Layout' component that handles the Navbar (with Nepal Flag logo) and Footer.",
+    "4. Build the 'CandidateCard' component first - it's the core of the voting page.",
+    "5. Use the provided image URLs for the Landing Page hero section.",
+    "6. For the 'Mission Statement', create a text-heavy section with the 'Playfair Display' font."
+  ]
+}
