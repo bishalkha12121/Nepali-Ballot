@@ -33,6 +33,7 @@ class Candidate(BaseModel):
     party: str
     party_symbol: str  # Icon name from lucide-react
     party_color: str
+    party_flag_url: Optional[str] = None
     image_url: str
     bio: str
     slogan: str
