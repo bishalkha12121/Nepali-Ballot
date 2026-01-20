@@ -267,6 +267,13 @@ HISTORICAL_DATA = [
 async def root():
     return {"message": "Nepal Election Simulation API"}
 
+@api_router.delete("/refresh-candidates")
+async def refresh_candidates():
+    """Delete and reseed candidates with updated data"""
+    await db.candidates.delete_many({})
+    await db.candidates.insert_many(CANDIDATES_DATA)
+    return {"message": "Candidates refreshed", "count": len(CANDIDATES_DATA)}
+
 @api_router.get("/candidates", response_model=List[Candidate])
 async def get_candidates():
     """Get all candidates"""
