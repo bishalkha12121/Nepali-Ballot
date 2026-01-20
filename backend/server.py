@@ -386,12 +386,116 @@ async def get_stats():
     total_votes = await db.votes.count_documents({})
     total_candidates = await db.candidates.count_documents({})
     
-    # Get votes over time (last 7 days aggregation would go here in production)
     return {
         "total_votes": total_votes,
         "total_candidates": total_candidates,
         "election_status": "active"
     }
+
+# ============== GAME ENDPOINTS ==============
+
+@api_router.get("/games/quiz-questions")
+async def get_quiz_questions():
+    """Get quiz questions with real Nepal politics data"""
+    # Ensure candidates are loaded
+    count = await db.candidates.count_documents({})
+    if count == 0:
+        await db.candidates.insert_many(CANDIDATES_DATA)
+    
+    candidates = await db.candidates.find({}, {"_id": 0}).to_list(100)
+    
+    questions = [
+        {"id": 1, "question": "When did Nepal become a Federal Democratic Republic?", "options": ["2006", "2007", "2008", "2010"], "correct": 2, "fact": "Nepal abolished monarchy on May 28, 2008"},
+        {"id": 2, "question": "How many provinces does Nepal have?", "options": ["5", "6", "7", "8"], "correct": 2, "fact": "Nepal has 7 federal provinces since 2015 constitution"},
+        {"id": 3, "question": f"Which party does {candidates[1]['name']} belong to?", "options": ["Nepali Congress", candidates[1]['party'], "RSP", "Maoist Centre"], "correct": 1, "fact": f"{candidates[1]['name']} is the chairman of {candidates[1]['party']}"},
+        {"id": 4, "question": "What is the symbol of Nepali Congress party?", "options": ["Sun", "Tree", "Bell", "Hammer"], "correct": 1, "fact": "Nepali Congress uses the Tree symbol since 1947"},
+        {"id": 5, "question": "Which year was Jana Andolan II (People's Movement)?", "options": ["2004", "2005", "2006", "2007"], "correct": 2, "fact": "Jana Andolan II in April 2006 ended King Gyanendra's rule"},
+        {"id": 6, "question": f"What is {candidates[0]['name']}'s profession before politics?", "options": ["Journalist", "Doctor", "Engineer", "Lawyer"], "correct": 2, "fact": f"{candidates[0]['name']} is a civil engineer and rapper"},
+        {"id": 7, "question": "How many seats are in Nepal's Federal Parliament?", "options": ["225", "250", "275", "300"], "correct": 2, "fact": "House of Representatives has 275 seats (165 FPTP + 110 PR)"},
+        {"id": 8, "question": f"Who founded {candidates[4]['party']}?", "options": ["Balen Shah", "KP Oli", candidates[4]['name'], "Prachanda"], "correct": 2, "fact": f"{candidates[4]['name']} founded RSP in 2022"},
+        {"id": 9, "question": "Which is the capital of Koshi Province?", "options": ["Pokhara", "Biratnagar", "Janakpur", "Hetauda"], "correct": 1, "fact": "Biratnagar is the capital and largest city of Koshi Province"},
+        {"id": 10, "question": "What year was Nepal's new constitution adopted?", "options": ["2013", "2014", "2015", "2016"], "correct": 2, "fact": "Constitution of Nepal was promulgated on September 20, 2015"},
+        {"id": 11, "question": f"What is {candidates[3]['name']}'s political alias?", "options": ["Comrade", "Prachanda", "Chairman", "Leader"], "correct": 1, "fact": "Pushpa Kamal Dahal is known as Prachanda (The Fierce One)"},
+        {"id": 12, "question": "Which province has the most federal seats?", "options": ["Koshi", "Madhesh", "Bagmati", "Lumbini"], "correct": 2, "fact": "Bagmati Province has 55 federal seats, the most among all provinces"},
+    ]
+    
+    import random
+    random.shuffle(questions)
+    return questions[:10]
+
+@api_router.get("/games/candidate-cards")
+async def get_candidate_cards():
+    """Get candidate cards with stats for card game"""
+    count = await db.candidates.count_documents({})
+    if count == 0:
+        await db.candidates.insert_many(CANDIDATES_DATA)
+    
+    candidates = await db.candidates.find({}, {"_id": 0}).to_list(100)
+    
+    # Get vote counts
+    pipeline = [{"$group": {"_id": "$candidate_id", "count": {"$sum": 1}}}]
+    vote_counts = {item["_id"]: item["count"] async for item in db.votes.aggregate(pipeline)}
+    
+    cards = []
+    for c in candidates:
+        votes = vote_counts.get(c["id"], 0)
+        cards.append({
+            "id": c["id"],
+            "name": c["name"],
+            "party": c["party"],
+            "party_color": c["party_color"],
+            "image_url": c["image_url"],
+            "slogan": c["slogan"],
+            "stats": {
+                "popularity": min(100, 40 + votes * 5 + hash(c["name"]) % 30),
+                "experience": 50 + hash(c["party"]) % 40,
+                "charisma": 45 + hash(c["slogan"]) % 45,
+                "vision": 55 + hash(c["id"]) % 35,
+                "votes": votes
+            }
+        })
+    return cards
+
+@api_router.get("/games/prediction-data")
+async def get_prediction_data():
+    """Get data for election prediction game"""
+    results_response = await get_results()
+    historical = HISTORICAL_DATA[:2]  # Get federal elections
+    
+    return {
+        "current_results": results_response,
+        "historical": historical,
+        "provinces": PROVINCES
+    }
+
+@api_router.post("/games/save-score")
+async def save_game_score(data: dict):
+    """Save player's game score"""
+    score_doc = {
+        "player_id": data.get("player_id", "anonymous"),
+        "game": data.get("game"),
+        "score": data.get("score"),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    await db.game_scores.insert_one(score_doc)
+    return {"success": True}
+
+@api_router.get("/games/leaderboard")
+async def get_leaderboard():
+    """Get top scores leaderboard"""
+    pipeline = [
+        {"$group": {"_id": "$player_id", "total_score": {"$sum": "$score"}, "games_played": {"$sum": 1}}},
+        {"$sort": {"total_score": -1}},
+        {"$limit": 10}
+    ]
+    leaderboard = []
+    async for item in db.game_scores.aggregate(pipeline):
+        leaderboard.append({
+            "player_id": item["_id"],
+            "total_score": item["total_score"],
+            "games_played": item["games_played"]
+        })
+    return leaderboard
 
 # Include the router in the main app
 app.include_router(api_router)
