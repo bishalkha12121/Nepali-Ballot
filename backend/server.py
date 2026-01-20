@@ -359,18 +359,26 @@ async def check_vote(voter_token: str):
         return {"has_voted": True, "candidate_id": existing_vote.get("candidate_id")}
     return {"has_voted": False, "candidate_id": None}
 
+@api_router.get("/provinces")
+async def get_provinces():
+    """Get all provinces of Nepal"""
+    return PROVINCES
+
 @api_router.get("/historical")
 async def get_historical_data():
     """Get historical election data"""
-    # Check if historical data exists, if not seed it
-    count = await db.historical_elections.count_documents({})
-    if count == 0:
-        await db.historical_elections.insert_many(HISTORICAL_DATA)
-    
-    elections = await db.historical_elections.find({}, {"_id": 0}).to_list(100)
-    # Sort by year descending
-    elections.sort(key=lambda x: x["year"], reverse=True)
-    return elections
+    # Always return fresh data from code to ensure accuracy
+    # Sort by year descending, then by election type
+    sorted_data = sorted(HISTORICAL_DATA, key=lambda x: (x["year"], x["election_type"]), reverse=True)
+    return sorted_data
+
+@api_router.get("/historical/{election_id}")
+async def get_historical_election(election_id: str):
+    """Get specific historical election by ID"""
+    for election in HISTORICAL_DATA:
+        if election["id"] == election_id:
+            return election
+    raise HTTPException(status_code=404, detail="Election not found")
 
 @api_router.get("/stats")
 async def get_stats():
