@@ -25,8 +25,6 @@ const IMAGES = {
   stupa: "https://images.unsplash.com/photo-1751953460151-a27fe39e5fad?w=800&q=80",
 };
 
-const partyIcons = { Sun, TreeDeciduous, Bell, Gavel };
-
 const getVoterToken = () => {
   let token = localStorage.getItem("voter_token");
   if (!token) {
