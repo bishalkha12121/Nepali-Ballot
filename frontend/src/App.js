@@ -10,6 +10,7 @@ import HistoryPage from "@/pages/HistoryPage";
 import GamesPage from "@/pages/GamesPage";
 import NewsPage from "@/pages/NewsPage";
 import ConstituenciesPage from "@/pages/ConstituenciesPage";
+import SportsPage from "@/pages/SportsPage";
 
 function App() {
   // Register Service Worker for PWA
@@ -39,6 +40,7 @@ function App() {
             <Route path="/games" element={<GamesPage />} />
             <Route path="/news" element={<NewsPage />} />
             <Route path="/constituencies" element={<ConstituenciesPage />} />
+            <Route path="/sports" element={<SportsPage />} />
           </Routes>
         </Layout>
         <Toaster position="top-center" richColors />
