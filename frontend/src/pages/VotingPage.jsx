@@ -379,11 +379,6 @@ const VotingPage = () => {
         <div className="mt-16">
           <NepalPrideSection />
         </div>
-
-        {/* Football Live Scores */}
-        <div className="mt-12">
-          <FootballWidget />
-        </div>
       </div>
 
       <Footer />
