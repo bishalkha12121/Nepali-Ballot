@@ -1,6 +1,9 @@
 # Complete Nepal Federal Constituencies Data
 # 165 FPTP seats distributed across 7 provinces
 
+# Import real election data
+from real_election_data import REAL_CANDIDATES, ELECTION_WINNERS_2022
+
 def generate_constituencies():
     """Generate all 165 federal constituencies"""
     constituencies = []
