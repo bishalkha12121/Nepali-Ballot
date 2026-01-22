@@ -61,8 +61,9 @@
   },
   "scripts": {
     "start": "craco start",
-    "dev": "craco start",
+    "dev": "vite",
     "build": "craco build",
+    "build:vite": "vite build",
     "test": "craco test",
     "serve": "npx serve -s build -l 3000"
   },
