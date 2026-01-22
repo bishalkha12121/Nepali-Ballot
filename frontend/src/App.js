@@ -12,6 +12,9 @@ import NewsPage from "@/pages/NewsPage";
 import ConstituenciesPage from "@/pages/ConstituenciesPage";
 import SportsPage from "@/pages/SportsPage";
 
+// Initialize Firebase
+import "@/firebase";
+
 function App() {
   // Register Service Worker for PWA
   useEffect(() => {
