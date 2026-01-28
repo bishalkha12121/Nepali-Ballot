@@ -712,7 +712,6 @@ async def get_leaderboard():
 
 RSS_FEEDS = [
     {"id": "bbc", "name": "BBC Nepali", "url": "https://feeds.bbci.co.uk/nepali/rss.xml", "color": "#BB1919"},
-    {"id": "ekantipur", "name": "Ekantipur", "url": "https://ekantipur.com/rss", "color": "#1E40AF"},
     {"id": "kathmandu", "name": "Kathmandu Post", "url": "https://kathmandupost.com/rss", "color": "#DC2626"},
 ]
 

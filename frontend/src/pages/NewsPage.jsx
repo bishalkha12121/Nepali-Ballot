@@ -28,9 +28,10 @@ const FALLBACK_NEWS = [
 
 const NEWS_SOURCES = [
   { id: "bbc", name: "BBC Nepali", url: "https://www.bbc.com/nepali", color: "#BB1919", logo: "🅱️" },
-  { id: "ekantipur", name: "Ekantipur", url: "https://ekantipur.com/", color: "#1E40AF", logo: "📰" },
   { id: "kathmandu", name: "Kathmandu Post", url: "https://kathmandupost.com/", color: "#DC2626", logo: "📄" },
 ];
+
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
 const LiveTicker = () => (
   <div className="bg-gradient-to-r from-gorkhali-red via-peace-blue to-gorkhali-red py-3 overflow-hidden">
@@ -123,6 +124,11 @@ const NewsPage = () => {
 
   useEffect(() => {
     fetchNews();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => fetchNews(false), AUTO_REFRESH_MS);
+    return () => clearInterval(timer);
   }, []);
 
   const fetchNews = async (showToast = false) => {
