@@ -10,22 +10,25 @@ import HistoryPage from "@/pages/HistoryPage";
 import GamesPage from "@/pages/GamesPage";
 import NewsPage from "@/pages/NewsPage";
 import ConstituenciesPage from "@/pages/ConstituenciesPage";
+import CandidatesPage from "@/pages/CandidatesPage";
 import SportsPage from "@/pages/SportsPage";
 
 // Initialize Firebase
 import "@/firebase";
 
 function App() {
-  // Register Service Worker for PWA
+  // Register Service Worker only in production to avoid caching dev bundles
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
+    if (process.env.NODE_ENV !== "production") return;
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker
+          .register("/sw.js")
           .then((registration) => {
-            console.log('SW registered:', registration);
+            console.log("SW registered:", registration);
           })
           .catch((error) => {
-            console.log('SW registration failed:', error);
+            console.log("SW registration failed:", error);
           });
       });
     }
@@ -40,10 +43,11 @@ function App() {
             <Route path="/vote" element={<VotingPage />} />
             <Route path="/results" element={<ResultsPage />} />
             <Route path="/history" element={<HistoryPage />} />
+            <Route path="/sports" element={<SportsPage />} />
+            <Route path="/candidates" element={<CandidatesPage />} />
             <Route path="/games" element={<GamesPage />} />
             <Route path="/news" element={<NewsPage />} />
             <Route path="/constituencies" element={<ConstituenciesPage />} />
-            <Route path="/sports" element={<SportsPage />} />
           </Routes>
         </Layout>
         <Toaster position="top-center" richColors />
@@ -53,3 +57,4 @@ function App() {
 }
 
 export default App;
+

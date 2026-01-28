@@ -7,7 +7,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const API_BASE =
+  process.env.REACT_APP_BACKEND_URL || "https://nepali-ballot2-production.up.railway.app";
+const API = `${API_BASE}/api`;
+
+const FALLBACK_NEWS = [
+  {
+    id: "fallback-1",
+    title: "Election coverage will appear here once sources are reachable.",
+    link: "https://nepali-ballot.web.app/",
+    description:
+      "If official RSS feeds are temporarily unavailable, the app will retry automatically.",
+    time: "Recent",
+    source: "Nepali Ballot",
+    sourceId: "system",
+    sourceColor: "#F77F00",
+    image: null,
+  },
+];
 
 const NEWS_SOURCES = [
   { id: "bbc", name: "BBC Nepali", url: "https://www.bbc.com/nepali", color: "#BB1919", logo: "🅱️" },
@@ -117,7 +134,9 @@ const NewsPage = () => {
       if (showToast) toast.success("News refreshed!");
     } catch (error) {
       console.error("Failed to fetch news:", error);
-      toast.error("Failed to load news");
+      setNews(FALLBACK_NEWS);
+      setLastUpdated(new Date());
+      toast.error("Failed to load news from sources. Showing fallback.");
     } finally {
       setLoading(false);
       setRefreshing(false);

@@ -1,27 +1,48 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
-import { Menu, X, Vote, BarChart3, History, Home, Gamepad2, Newspaper, MapPin, Trophy } from "lucide-react";
+import {
+  Menu,
+  X,
+  Vote,
+  BarChart3,
+  History,
+  Home,
+  Gamepad2,
+  Newspaper,
+  MapPin,
+  Users,
+  Trophy,
+  ChevronDown,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-const allNavLinks = [
+const mainNavLinks = [
   { path: "/", label: "Home", icon: Home },
   { path: "/vote", label: "Vote Now", icon: Vote },
-  { path: "/results", label: "Results", icon: BarChart3, hideOnVote: true },
   { path: "/constituencies", label: "Constituencies", icon: MapPin },
+  { path: "/candidates", label: "Candidates", icon: Users },
   { path: "/news", label: "News", icon: Newspaper },
-  { path: "/sports", label: "Sports", icon: Trophy },
-  { path: "/history", label: "History", icon: History },
   { path: "/games", label: "Games", icon: Gamepad2 },
+];
+
+const dropdownLinks = [
+  { path: "/results", label: "Election Results", icon: BarChart3 },
+  { path: "/history", label: "Election History", icon: History },
+  { path: "/sports", label: "Sports Center", icon: Trophy },
 ];
 
 const Layout = ({ children }) => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const isHomePage = location.pathname === "/";
   const isVotePage = location.pathname === "/vote";
 
-  // Filter out Results link when on Vote page to avoid spoilers
-  const navLinks = allNavLinks.filter(link => !(isVotePage && link.hideOnVote));
+  // Filter out Results dropdown entry when on Vote page to avoid spoilers
+  const filteredDropdown = dropdownLinks.filter(
+    (link) => !(isVotePage && link.path === "/results")
+  );
+  const footerLinks = [...mainNavLinks, ...filteredDropdown];
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -31,10 +52,7 @@ const Layout = ({ children }) => {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-3 group" data-testid="logo-link">
-              <motion.div 
-                className="w-10 h-10 relative"
-                whileHover={{ rotate: 5 }}
-              >
+              <motion.div className="w-10 h-10 relative" whileHover={{ rotate: 5 }}>
                 <svg viewBox="0 0 40 48" className="w-full h-full drop-shadow-md">
                   <polygon points="0,0 40,16 0,32" fill="#D90429" />
                   <polygon points="0,16 40,32 0,48" fill="#003049" />
@@ -46,24 +64,26 @@ const Layout = ({ children }) => {
                 <h1 className="font-bebas text-xl text-peace-blue tracking-wider group-hover:text-gorkhali-red transition-colors">
                   NEPALI BALLOT
                 </h1>
-                <p className="text-xs text-gray-500 -mt-1 font-inter">Election Simulation</p>
+                <p className="text-xs text-gray-500 -mt-1 font-inter">
+                  Election Simulation
+                </p>
               </div>
             </Link>
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center gap-1" data-testid="desktop-nav">
-              {navLinks.map((link) => {
+              {mainNavLinks.map((link) => {
                 const isActive = location.pathname === link.path;
                 return (
                   <Link
                     key={link.path}
                     to={link.path}
-                    data-testid={`nav-${link.label.toLowerCase().replace(' ', '-')}`}
+                    data-testid={`nav-${link.label.toLowerCase().replace(" ", "-")}`}
                   >
                     <motion.div
                       className={`px-4 py-2 rounded-sm font-inter text-sm font-medium flex items-center gap-2 transition-all ${
-                        isActive 
-                          ? "bg-gorkhali-red text-white" 
+                        isActive
+                          ? "bg-gorkhali-red text-white"
                           : "text-peace-blue hover:bg-gray-100"
                       }`}
                       whileHover={{ y: -2 }}
@@ -75,6 +95,48 @@ const Layout = ({ children }) => {
                   </Link>
                 );
               })}
+
+              {/* More dropdown: Results, History, Sports */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setMoreOpen((prev) => !prev)}
+                  className={`ml-1 px-4 py-2 rounded-sm font-inter text-sm font-medium flex items-center gap-2 transition-all ${
+                    filteredDropdown.some((d) => d.path === location.pathname)
+                      ? "bg-gorkhali-red text-white"
+                      : "text-peace-blue hover:bg-gray-100"
+                  }`}
+                >
+                  <BarChart3 size={16} />
+                  More
+                  <ChevronDown
+                    size={14}
+                    className={`${moreOpen ? "rotate-180" : ""} transition-transform`}
+                  />
+                </button>
+                {moreOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white shadow-lg border border-gray-200 rounded-sm z-50">
+                    <ul className="py-1">
+                      {filteredDropdown.map((item) => (
+                        <li key={item.path}>
+                          <Link
+                            to={item.path}
+                            onClick={() => setMoreOpen(false)}
+                            className={`flex items-center gap-2 px-4 py-2 text-sm font-inter ${
+                              location.pathname === item.path
+                                ? "bg-gorkhali-red/10 text-gorkhali-red"
+                                : "text-peace-blue hover:bg-gray-100"
+                            }`}
+                          >
+                            <item.icon size={16} />
+                            {item.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </nav>
 
             {/* Mobile Menu Button */}
@@ -100,7 +162,7 @@ const Layout = ({ children }) => {
               data-testid="mobile-menu"
             >
               <nav className="px-4 py-4 space-y-2">
-                {navLinks.map((link, i) => (
+                {mainNavLinks.map((link, i) => (
                   <motion.div
                     key={link.path}
                     initial={{ opacity: 0, x: -20 }}
@@ -110,7 +172,7 @@ const Layout = ({ children }) => {
                     <Link
                       to={link.path}
                       onClick={() => setMobileMenuOpen(false)}
-                      data-testid={`mobile-nav-${link.label.toLowerCase().replace(' ', '-')}`}
+                      data-testid={`mobile-nav-${link.label.toLowerCase().replace(" ", "-")}`}
                       className={`flex items-center gap-3 px-4 py-3 rounded-sm font-inter ${
                         location.pathname === link.path
                           ? "bg-gorkhali-red text-white"
@@ -122,6 +184,34 @@ const Layout = ({ children }) => {
                     </Link>
                   </motion.div>
                 ))}
+
+                {/* Mobile "More" section */}
+                <div className="mt-4 border-t border-gray-200 pt-2">
+                  <p className="px-4 pb-1 text-xs font-inter text-gray-400 uppercase tracking-wider">
+                    More
+                  </p>
+                  {filteredDropdown.map((item, i) => (
+                    <motion.div
+                      key={item.path}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.05 * i }}
+                    >
+                      <Link
+                        to={item.path}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-sm font-inter ${
+                          location.pathname === item.path
+                            ? "bg-gorkhali-red text-white"
+                            : "text-peace-blue hover:bg-gray-100"
+                        }`}
+                      >
+                        <item.icon size={20} />
+                        {item.label}
+                      </Link>
+                    </motion.div>
+                  ))}
+                </div>
               </nav>
             </motion.div>
           )}
@@ -158,7 +248,7 @@ const Layout = ({ children }) => {
               <div>
                 <h4 className="font-bebas text-lg tracking-wider mb-4">QUICK LINKS</h4>
                 <ul className="space-y-2 font-inter text-sm text-gray-300">
-                  {navLinks.map((link) => (
+                  {footerLinks.map((link) => (
                     <li key={link.path}>
                       <Link to={link.path} className="hover:text-marigold transition-colors">
                         {link.label}
@@ -195,3 +285,4 @@ const Layout = ({ children }) => {
 };
 
 export default Layout;
+

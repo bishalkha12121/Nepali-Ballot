@@ -6,12 +6,16 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Tuple
 import uuid
 from datetime import datetime, timezone
 import httpx
 import xml.etree.ElementTree as ET
 import asyncio
+import io
+import re
+import time
+import pdfplumber
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -68,6 +72,9 @@ class VoteResult(BaseModel):
     party_color: str
     vote_count: int
     percentage: float
+
+class WikiBatchRequest(BaseModel):
+    queries: List[str]
 
 class HistoricalElection(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -265,6 +272,167 @@ HISTORICAL_DATA = [
     }
 ]
 
+# ============== OFFICIAL PR DATA (2082) ==============
+PR_CANDIDATE_PDF_URL = (
+    "https://election.gov.np/admin/public//storage/HOR%202082/PR/PreliminaryCandidateListPR.pdf"
+)
+PR_CACHE: Dict[str, Any] = {"timestamp": 0, "data": None}
+PR_CACHE_TTL_SECONDS = 6 * 60 * 60  # 6 hours
+
+# Wikipedia cache for candidate photos
+WIKI_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+WIKI_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
+WIKI_SEMAPHORE = asyncio.Semaphore(5)
+
+KNOWN_PARTY_MARKERS = [
+    "Party",
+    "Political Party",
+    "दल",
+    "पार्टी",
+]
+
+def _clean_line(line: str) -> str:
+    return re.sub(r"\s+", " ", line).strip()
+
+def _extract_party_from_line(line: str) -> Optional[str]:
+    for marker in KNOWN_PARTY_MARKERS:
+        if marker.lower() in line.lower():
+            match = re.split(r"[:\-]", line, maxsplit=1)
+            if len(match) == 2:
+                party = _clean_line(match[1])
+                return party or None
+    return None
+
+def _is_candidate_line(line: str) -> bool:
+    if len(line) < 3:
+        return False
+    if re.search(r"\b(प्रारम्भिक|सूची|उम्मेदवार|नामावली|पार्टी|दल|प्रान्त|जिल्ला|क्रम)\b", line):
+        return False
+    if re.match(r"^[\d\.\)\-]+$", line):
+        return False
+    return bool(re.search(r"[A-Za-z]", line)) or bool(re.search(r"[\u0900-\u097F]", line))
+
+def _extract_candidate_name(line: str) -> str:
+    line = re.sub(r"^\s*\d+[\.\)\-]?\s*", "", line)
+    parts = re.split(r"\s{2,}", line)
+    if len(parts) > 1:
+        return _clean_line(parts[1])
+    return _clean_line(line)
+
+def _group_candidates_by_party(lines: List[str]) -> Tuple[List[Dict[str, Any]], List[str]]:
+    parties: Dict[str, List[Dict[str, Any]]] = {}
+    unassigned: List[str] = []
+    current_party: Optional[str] = None
+
+    for raw_line in lines:
+        line = _clean_line(raw_line)
+        if not line:
+            continue
+
+        party = _extract_party_from_line(line)
+        if party:
+            current_party = party
+            parties.setdefault(current_party, [])
+            continue
+
+        if _is_candidate_line(line):
+            name = _extract_candidate_name(line)
+            if current_party:
+                parties[current_party].append({"name": name})
+            else:
+                unassigned.append(name)
+
+    party_list = [
+        {"party": party, "candidates": candidates}
+        for party, candidates in parties.items()
+    ]
+    party_list.sort(key=lambda p: p["party"].lower())
+    return party_list, sorted(set(unassigned))
+
+async def _fetch_pdf_bytes(url: str) -> bytes:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        return resp.content
+
+def _extract_pdf_lines(pdf_bytes: bytes) -> List[str]:
+    lines: List[str] = []
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text() or ""
+            for line in text.splitlines():
+                cleaned = _clean_line(line)
+                if cleaned:
+                    lines.append(cleaned)
+    return lines
+
+async def _get_pr_candidates(refresh: bool = False) -> Dict[str, Any]:
+    now = time.time()
+    if (
+        PR_CACHE["data"]
+        and not refresh
+        and now - PR_CACHE["timestamp"] < PR_CACHE_TTL_SECONDS
+    ):
+        return PR_CACHE["data"]
+
+    pdf_bytes = await _fetch_pdf_bytes(PR_CANDIDATE_PDF_URL)
+    lines = _extract_pdf_lines(pdf_bytes)
+    parties, unassigned = _group_candidates_by_party(lines)
+    data = {
+        "source_url": PR_CANDIDATE_PDF_URL,
+        "parties": parties,
+        "unassigned": unassigned,
+        "total_parties": len(parties),
+        "total_candidates": sum(len(p["candidates"]) for p in parties) + len(unassigned),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    PR_CACHE["data"] = data
+    PR_CACHE["timestamp"] = now
+    return data
+
+async def _get_wiki_summary(query: str) -> Dict[str, Any]:
+    now = time.time()
+    cached = WIKI_CACHE.get(query)
+    if cached and now - cached[0] < WIKI_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    async with WIKI_SEMAPHORE:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            search_url = "https://en.wikipedia.org/w/api.php"
+            search_params = {
+                "action": "opensearch",
+                "search": query,
+                "limit": 1,
+                "namespace": 0,
+                "format": "json",
+            }
+            search_resp = await client.get(search_url, params=search_params)
+            search_resp.raise_for_status()
+            search_data = search_resp.json()
+            title = search_data[1][0] if len(search_data) > 1 and search_data[1] else None
+
+            if not title:
+                data = {"query": query, "title": None, "page_url": None, "image_url": None}
+                WIKI_CACHE[query] = (now, data)
+                return data
+
+            summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
+            summary_resp = await client.get(summary_url)
+            summary_resp.raise_for_status()
+            summary = summary_resp.json()
+            image_url = None
+            if isinstance(summary.get("thumbnail"), dict):
+                image_url = summary["thumbnail"].get("source")
+
+            data = {
+                "query": query,
+                "title": summary.get("title"),
+                "page_url": summary.get("content_urls", {}).get("desktop", {}).get("page"),
+                "image_url": image_url,
+            }
+            WIKI_CACHE[query] = (now, data)
+            return data
+
 # ============== ENDPOINTS ==============
 
 @api_router.get("/")
@@ -278,24 +446,51 @@ async def refresh_candidates():
     await db.candidates.insert_many(CANDIDATES_DATA)
     return {"message": "Candidates refreshed", "count": len(CANDIDATES_DATA)}
 
+async def _get_candidates_safe() -> List[Dict[str, Any]]:
+    """Return candidates from DB, fall back to static data if DB is unavailable."""
+    try:
+        count = await db.candidates.count_documents({})
+        if count == 0:
+            await db.candidates.insert_many(CANDIDATES_DATA)
+        candidates = await db.candidates.find({}, {"_id": 0}).to_list(100)
+        return candidates or CANDIDATES_DATA
+    except Exception as exc:
+        logger.warning("Candidates DB unavailable, using fallback data", exc_info=exc)
+        return CANDIDATES_DATA
+
 @api_router.get("/candidates", response_model=List[Candidate])
 async def get_candidates():
     """Get all candidates"""
-    # Check if candidates exist in DB, if not seed them
-    count = await db.candidates.count_documents({})
-    if count == 0:
-        await db.candidates.insert_many(CANDIDATES_DATA)
-    
-    candidates = await db.candidates.find({}, {"_id": 0}).to_list(100)
-    return candidates
+    return await _get_candidates_safe()
 
 @api_router.get("/candidates/{candidate_id}", response_model=Candidate)
 async def get_candidate(candidate_id: str):
     """Get single candidate by ID"""
-    candidate = await db.candidates.find_one({"id": candidate_id}, {"_id": 0})
+    try:
+        candidate = await db.candidates.find_one({"id": candidate_id}, {"_id": 0})
+    except Exception as exc:
+        logger.warning("Candidates DB unavailable, using fallback data", exc_info=exc)
+        candidate = None
+    if not candidate:
+        candidate = next((c for c in CANDIDATES_DATA if c.get("id") == candidate_id), None)
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
     return candidate
+
+@api_router.get("/ec/pr-candidates")
+async def get_pr_candidates(refresh: bool = False):
+    """Parse official PR candidate PDF and return grouped candidates by party."""
+    return await _get_pr_candidates(refresh=refresh)
+
+@api_router.post("/wiki/batch")
+async def wiki_batch(payload: WikiBatchRequest):
+    """Fetch Wikipedia summary data for a batch of candidate names."""
+    queries = [q.strip() for q in payload.queries if q and q.strip()]
+    queries = list(dict.fromkeys(queries))[:100]
+    results = {}
+    for query in queries:
+        results[query] = await _get_wiki_summary(query)
+    return {"results": results}
 
 @api_router.post("/vote")
 async def cast_vote(vote: VoteCreate):
